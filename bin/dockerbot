@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import runpy
+
+SCRIPT_DIR = os.path.dirname(__file__)
+LIB_DIR = os.path.join(SCRIPT_DIR, '../src')
+sys.path.insert(0, os.path.realpath(LIB_DIR))
+
+runpy.run_module('dockerbot')
