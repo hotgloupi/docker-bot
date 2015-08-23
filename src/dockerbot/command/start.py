@@ -79,6 +79,9 @@ def main(force, directory, console):
             warn('Cannot find', container_id)
         os.unlink(master_container_path)
 
+    twisted_pidfile = os.path.join(buildbot_root, 'twistd.pid') 
+    if os.path.exists(twisted_pidfile):
+        os.unlink(twisted_pidfile)
     copy_resource('master.cfg', buildbot_root)
     copy_resource('dockerslave.py', buildbot_root)
 

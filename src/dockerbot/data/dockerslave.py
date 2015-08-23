@@ -189,6 +189,6 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
         docker_client.remove_container(instance['Id'], v=True, force=True)
         if self.image is None:
             try:
-                docker_client.remove_image(image=instance['image'])
+                docker_client.remove_image(image=instance['image'], force = True)
             except docker.errors.APIError as e:
                 log.msg('Error while removing the image: %s', e)
