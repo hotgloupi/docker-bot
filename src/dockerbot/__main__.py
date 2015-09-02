@@ -6,6 +6,7 @@ import sys
 import os
 
 from . import command
+from . import log
 from .error import Error
 
 DESCRIPTION = """
@@ -29,7 +30,14 @@ common_parser.add_argument(
 )
 
 common_parser.add_argument(
-    'directory',
+    '-d', '--debug',
+    action = 'store_true',
+    help = 'Enable debug output',
+)
+
+common_parser.add_argument(
+    'project_directory',
+    nargs = '?',
     help = 'Path to the docker-bot config directory',
 )
 
@@ -37,17 +45,11 @@ common_parser.add_argument(
 subparsers = parser.add_subparsers(help = 'command')
 
 
-# Init command parser #########################################################
-init_parser = subparsers.add_parser(
-    'init',
-    help = 'Initialize a new docker-bot directory',
+# create command parser #######################################################
+create_parser = subparsers.add_parser(
+    'create',
+    help = 'create a new docker-bot directory',
     parents = [common_parser],
-)
-
-init_parser.add_argument(
-    '--build-directory', '-b',
-    help = 'Specify a build directory outside of the root directory',
-    action = 'store',
 )
 
 
@@ -59,17 +61,46 @@ start_parser = subparsers.add_parser(
 )
 
 start_parser.add_argument(
+    'build_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot build directory',
+)
+
+start_parser.add_argument(
     '--console', '-c',
-    help = 'Start a console instead of launching the daemon',
+    help = 'Start a console in the buildbot master docker',
     action = 'store_true'
 )
 
+start_parser.add_argument(
+    '--interactive', '-i',
+    help = 'Start the buildbot master in foreground',
+    action = 'store_true'
+)
+
+# Status command parser #######################################################
+status_parser = subparsers.add_parser(
+    'status',
+    help = 'Check the status',
+    parents = [common_parser],
+)
+
+status_parser.add_argument(
+    'build_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot build directory',
+)
+
+
 # Parsing arguments
-init_parser.set_defaults(func = command.init.main)
+create_parser.set_defaults(func = command.create.main)
 start_parser.set_defaults(func = command.start.main)
+status_parser.set_defaults(func = command.status.main)
 
 args = vars(parser.parse_args())
 main = args.pop('func')
+if args.pop('debug'):
+    log.LEVEL = log.Level.debug
 
 try:
     main(**args)
