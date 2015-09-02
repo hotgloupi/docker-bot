@@ -3,7 +3,8 @@ RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
            python-dev \
            python-pip \
-           git
+           git \
+           zip
 RUN pip install buildbot-slave
 RUN groupadd -r buildbot && useradd -r -g buildbot buildbot
 RUN mkdir /buildslave && chown buildbot:buildbot /buildslave
