@@ -17,7 +17,11 @@ def copy_resource(name, dest_dir, overwrite = True, dest_name = None):
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
 
-    with pkg.resource_stream('dockerbot.data', name) as src:
-
+    # XXX Apparently, in an archive, the src does not have an '__exit__' attribute,
+    # making it incompatible with a with statement
+    src = pkg.resource_stream('dockerbot.data', name)
+    try:
         with open(dest, 'w') as out:
             out.write(src.read())
+    finally:
+        src.close()
