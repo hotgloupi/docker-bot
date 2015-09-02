@@ -1,0 +1,22 @@
+master:
+    image-name: buildbot-master
+    www-port: 8010
+    server-port: 9989
+    server-address: exposed interface
+    docker-socket: /var/run/docker.sock
+
+repository:
+    url: git://github.com/hotgloupi/docker-bot.git
+
+slaves:
+    sample:
+        docker-host: unix:///var/run/docker.sock
+        docker-file: slaves/sample.dockerfile
+
+builds:
+    sample:
+        slaves:
+            - sample
+        steps:
+            - setup.sh
+            - build.sh
