@@ -11,6 +11,6 @@ RUN mkdir /buildslave && chown buildbot:buildbot /buildslave
 # Install your build-dependencies here ...
 USER buildbot
 WORKDIR /buildslave
-RUN buildslave create-slave . {master_hostname} {slave_name} {slave_password}
-ENTRYPOINT ["/usr/local/bin/buildslave"]
-CMD ["start", "--nodaemon"]
+ENTRYPOINT \
+    buildslave create-slave . "$MASTER_PORT_9989_TCP_ADDR:$MASTER_PORT_9989_TCP_PORT" {slave_name} {slave_password} \
+    && buildslave start --nodaemon
