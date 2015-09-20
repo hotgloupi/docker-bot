@@ -35,12 +35,6 @@ common_parser.add_argument(
     help = 'Enable debug output',
 )
 
-common_parser.add_argument(
-    'project_directory',
-    nargs = '?',
-    help = 'Path to the docker-bot config directory',
-)
-
 # Subparsers ##################################################################
 subparsers = parser.add_subparsers(help = 'command')
 
@@ -52,6 +46,11 @@ create_parser = subparsers.add_parser(
     parents = [common_parser],
 )
 
+create_parser.add_argument(
+    'project_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot config directory',
+)
 
 # Start command parser ########################################################
 start_parser = subparsers.add_parser(
@@ -67,13 +66,58 @@ start_parser.add_argument(
 )
 
 start_parser.add_argument(
+    'project_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot config directory',
+)
+
+start_parser.add_argument(
     '--console', '-c',
     help = 'Start a console in the buildbot master docker',
     action = 'store_true'
 )
 
 start_parser.add_argument(
-    '--interactive', '-i',
+    '--follow', '-F',
+    help = 'Start the buildbot master in foreground',
+    action = 'store_true'
+)
+
+# Stop command parser #########################################################
+stop_parser = subparsers.add_parser(
+    'stop',
+    help = 'Stop a dockerbot instance',
+    parents = [common_parser],
+)
+
+stop_parser.add_argument(
+    'build_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot build directory',
+)
+
+
+# Restart command parser ######################################################
+restart_parser = subparsers.add_parser(
+    'restart',
+    help = 'Restart a dockerbot instance',
+    parents = [common_parser],
+)
+
+restart_parser.add_argument(
+    'build_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot build directory',
+)
+
+restart_parser.add_argument(
+    '--console', '-c',
+    help = 'Start a console in the buildbot master docker',
+    action = 'store_true'
+)
+
+restart_parser.add_argument(
+    '--follow', '-F',
     help = 'Start the buildbot master in foreground',
     action = 'store_true'
 )
@@ -95,6 +139,8 @@ status_parser.add_argument(
 # Parsing arguments
 create_parser.set_defaults(func = command.create.main)
 start_parser.set_defaults(func = command.start.main)
+stop_parser.set_defaults(func = command.stop.main)
+restart_parser.set_defaults(func = command.restart.main)
 status_parser.set_defaults(func = command.status.main)
 
 args = vars(parser.parse_args())
