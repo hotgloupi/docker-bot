@@ -3,7 +3,7 @@ from __future__ import print_function
 import os
 import subprocess
 
-def main(project_directory, build_directory, force):
+def main(build_directory, force):
     if build_directory is None:
         build_directory = os.getcwd()
     build_directory = os.path.abspath(build_directory)
@@ -13,7 +13,7 @@ def main(project_directory, build_directory, force):
             container_id = f.read().strip()
         containers = subprocess.check_output(['docker', 'ps', '-a', '-q', '--no-trunc']).strip().split('\n')
         if container_id in containers:
-            state = subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Running}}', container_id])
+            state = subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Running}}', container_id]).strip()
             if state == 'true':
                 print("docker-bot: running")
             else:
