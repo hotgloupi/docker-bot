@@ -57,7 +57,9 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
     instance = None
 
     def __init__(self, name, password, docker_host, image=None, command=None,
-                 volumes=None, dockerfile=None, version=None, tls=None, followStartupLogs=False,
+                 volumes=None, dockerfile=None, version=None, tls=None,
+                 followStartupLogs=False,
+                 create_container_args=None,
                  **kwargs):
 
         if not client:
@@ -100,6 +102,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
             self.client_args['version'] = version
         if tls is not None:
             self.client_args['tls'] = tls
+        self.create_container_args = create_container_args or {}
 
     def start_instance(self, build):
         if self.instance is not None:
@@ -146,6 +149,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
             self.command,
             name='%s_%s' % (self.slavename, id(self)),
             volumes=self.volumes,
+            **self.create_container_args
         )
 
         if instance.get('Id') is None:
