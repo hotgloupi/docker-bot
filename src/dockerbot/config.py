@@ -1,45 +1,78 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
+import yaml
 import os
+import random
 
-try:
-    import ConfigParser as configparser
-except ImportError:
-    import configparser
+from .error import Error
 
-class Config(object):
+def load(build_directory, config_file):
+    with open(config_file) as f:
+        cfg = yaml.load(f)
 
-    def __init__(self, config_parser):
-        self.parser = config_parser
+    project = cfg.get('project')
+    if project is None:
+        raise Error("Missing 'project' key in config file")
 
-    @classmethod
-    def from_file(cls, path):
-        parser = cls.make_parser()
-        parser.read(path)
-        return cls(parser)
+    for name, slave in cfg['slaves'].items():
+        is_external = slave.get('external', not bool(slave.get('docker-file')))
+        slave['external'] = is_external
+        if not is_external:
+            slave.setdefault('volumes', []).append('builds/%s:/buildslave/' % name)
+            volumes = []
+            for volume in slave['volumes']:
+                parts = volume.split(':')
+                src, dst = parts[0:2]
+                if not os.path.isabs(src):
+                    src = os.path.join(build_directory, src)
+                if not os.path.isabs(dst):
+                    raise Error(
+                        ("The volume %s destination mount point of the slave %s is"
+                         " not absolute") % (volume, name)
+                    )
+                volumes.append(':'.join([src, dst] + parts[2:]))
+            slave['volumes'] = volumes
 
-    @classmethod
-    def from_dir(cls, directory, filename = 'dockerbot.ini'):
-        return cls.from_file(os.path.join(directory, filename))
+        # Make sure that each slave has an env
+        slave.setdefault('env', {})
+        slave['env']['SLAVE_NAME'] = name
+        if not is_external:
+            slave.setdefault('idle-timeout', 600)
+            slave.setdefault('image-name', '%s-build-%s' % (project, name))
+        slave.setdefault(
+            'password',
+            '%s-%s-%s' % (project, name, random.randint(0, 10000000000))
+        )
 
-    @classmethod
-    def make_parser(cls, *args, **kw):
-        return configparser.SafeConfigParser(*args, **kw)
+    for name, repository in cfg['repositories'].items():
+        repository['name'] = name
+        repository.setdefault('branch', 'master')
+        repository.setdefault('poll-interval', 30)
 
+    for name, build in cfg['builds'].items():
+        repository_name = build.get('repository', name)
+        if repository_name not in cfg['repositories']:
+            raise Error("Repository '%s' is not present in the repositories section" %
+                        repository_name)
+        build['repository'] = cfg['repositories'][repository_name]
+        build['repository']['name'] = repository_name
+        build.setdefault('env', {})
 
-    def _split_key(self, key):
-        parts = key.split('.')
-        return parts[0], '.'.join(parts[1:])
+        if 'variants' not in build:
+            build['variants'] = {'default': {'name': name}}
 
-    def __getitem__(self, full_key):
-        section, key = self._split_key(full_key)
-        if not self.parser.has_option(section, key):
-            raise KeyError(full_key)
-        return self.parser.get(section, key)
+        for variant_name, variant in build['variants'].items():
+            variant.setdefault('name', '%s-%s' % (name, variant_name))
+            variant.setdefault('slaves', build.get('slaves'))
+            variant.setdefault('steps', build.get('steps'))
+            variant.setdefault('artifacts', build.get('artifacts', []))
+            env = {}
+            env.update(build['env'])
+            env.update(variant.get('env', {}))
+            variant['env'] = env
+            for k in ('slaves', 'steps'):
+                if not variant[k]:
+                    raise Error("Build variant %s does not have any k" % (variant['name'], k))
 
-    def __setitem__(self, full_key, value):
-        section, key = self._split_key(full_key)
-        if not self.parser.has_section(section):
-            self.parser.add_section(section)
-        return self.parser.set(section, key, value)
+    return cfg
