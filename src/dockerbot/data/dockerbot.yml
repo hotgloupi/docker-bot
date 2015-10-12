@@ -1,22 +1,104 @@
+
+# Buildbot master configuration
 master:
+    # name of the docker image
     image-name: buildbot-master
+
+    # Exposed port for web interface
     www-port: 8010
+
+    # Port through which slaves are going to access the master
     server-port: 9989
-    server-address: exposed interface
+
+    # Master public ip address
+    server-address: 127.0.0.1
+
+    # The master docker socket
     docker-socket: /var/run/docker.sock
 
-repository:
-    url: git://github.com/hotgloupi/docker-bot.git
+# Describe repositories
+repositories:
+    # Name of the repo (used in the build descriptions)
+    docker-bot:
+        # The only mandatory option
+        url: git://github.com/hotgloupi/docker-bot.git
 
+        # Does it have submodules ? (default to false)
+        # submodules: true
+
+        # Name of the private key file (in the keys/ directory)
+        # key: some-key.rsa
+
+# Describe the buildbot slaves
 slaves:
-    sample:
+    # Name of the slave (used in the build descriptions)
+    linux32:
+        # Docker socket to create the slave (can be tcp://...)
         docker-host: unix:///var/run/docker.sock
+
+        # Dockerfile used to create the slave
         docker-file: slaves/sample.dockerfile
 
+        # A list of volumes to mount into this slave
+        volumes:
+            # The syntax is the same as the docker '-v' option: "host-path:container-path[:mount-options]"
+            # However, the 'host-path' can be a relative path, in which case it
+            # will be relative to the build directory
+            - "artifacts:/artifacts"
+
+        # The timeout (in seconds) before destroying the docker slave.
+        # if it's 0 (the default value) then the container will be discarded
+        # after each build. If it's -1, then it will be kept alive forever.
+        idle-timeout: -1
+
+        # Environment variables for the container (only for docker slaves)
+        env:
+            SOME_KEY: "Some value"
+
+    # Example of an external slave (i.e. not a docker slave)
+    win32:
+        external: true
+        password: "some password"
+
+# Describe the builds
 builds:
-    sample:
+    # Name of the build
+    linux32:
+        # Which slave can execute the build
         slaves:
-            - sample
+            - linux32
+
+        # List of the scripts that will compose the build.
+        # The paths are relative to the steps/ directory
         steps:
             - setup.sh
             - build.sh
+
+        # Environment variable for the builds
+        env:
+            SOME_KEY: "Some value"
+            SOME_OTHER_KEY: "Some other value"
+
+        # Optionally you can add variants. By default, one variant is created
+        # with the slaves, steps and env of the build
+        variants:
+            # Name of the variant (the final build name here will be "linux32-debug")
+            debug:
+                # You can force a name if you don't like the {buildname}-{variantname}
+                # name: some-fancy-name
+
+                # If specified, override the build slaves
+                slaves:
+                    - linux32
+                # If specified, override the build steps
+                steps:
+                    - setup.sh
+                    - build.sh
+
+                # Environment variable for the variant (will inherit the build env)
+                env:
+                    SOME_KEY: "Overriden by the variant"
+                    NEW_KEY: "New value"
+                    # SOME_OTHER_KEY is inherited from the build
+
+
