@@ -1,17 +1,23 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
-from ..config import Config
+from .. import config
+from .. import docker
+
 from ..error import Error
 from ..log import warn, status, debug_stream
 from ..tools import copy_resource
-import yaml
 
+import io
 import json
 import os
+import random
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
+import getpass
 
 def replace_dir(src, dst):
     if os.path.exists(dst):
@@ -24,6 +30,12 @@ def link_dir(src, dst):
     if not os.path.islink(dst):
         raise Error("%s should be a symlink (try to remove it manually)" % dst)
 
+def file_content(path, **kw):
+    with open(path) as f:
+        return f.read().format(**kw)
+
+
+
 def main(force, project_directory, build_directory, console, follow):
     if build_directory is None:
         build_directory = os.getcwd()
@@ -32,7 +44,8 @@ def main(force, project_directory, build_directory, console, follow):
     if os.path.exists(build_directory):
         ls = os.listdir(build_directory)
         if ls and '.dockerbot-build' not in ls:
-            raise Error("%s is not empty and is not an existing build dir" % build_directory)
+            raise Error("%s is not empty and is not an existing build dir" %
+                        build_directory)
     else:
         os.makedirs(build_directory)
 
@@ -51,25 +64,37 @@ def main(force, project_directory, build_directory, console, follow):
 
     with open(marker, 'w') as f: f.write(project_directory)
 
-    cfg = yaml.load(open(config_file))
+    cfg = config.load(build_directory, config_file)
+    for name, slave in cfg['slaves'].items():
+        for volume in slave.get('volumes', []):
+            parts = volume.split(':')
+            src, dst = parts[0:2]
+            if not os.path.exists(src):
+                os.makedirs(src)
+                #os.chmod(src, stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)
 
     buildbot_root = os.path.join(build_directory, 'buildbot')
 
-    master_container_path = os.path.abspath(os.path.join(build_directory, 'master.container'))
+    client = docker.Client()
+
+    master_container_path = os.path.abspath(
+        os.path.join(build_directory, 'master.container')
+    )
     if os.path.exists(master_container_path):
         status('Cleaning up old master container')
         with open(master_container_path) as f:
             container_id = f.read().strip()
-        containers = subprocess.check_output(['docker', 'ps', '-a', '-q', '--no-trunc']).strip().split('\n')
-        if container_id in containers:
-            state = subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Running}}', container_id]).strip()
-            if state == 'true':
+        if container_id in client.containers:
+            if client.is_container_alive(container_id):
                 if not force:
-                    raise Error("Master is already running in %s (use -f to force)" % container_id)
-                subprocess.call(['docker', 'stop', container_id], stdout = debug_stream())
+                    raise Error(
+                        "Master is already running in %s (use -f to force)" %
+                        container_id
+                    )
+                client.stop_container(container_id)
             else:
                 warn("Removing dead master container", container_id)
-            state = subprocess.call(['docker', 'rm', '-f', container_id], stdout = debug_stream())
+            client.remove_container(container_id)
         else:
             warn('Cannot find', container_id)
         os.unlink(master_container_path)
@@ -80,81 +105,74 @@ def main(force, project_directory, build_directory, console, follow):
     copy_resource('master.cfg', buildbot_root)
     copy_resource('dockerslave.py', buildbot_root)
 
-    copy_resource('buildbot.conf', build_directory)
     with open(os.path.join(project_directory, 'master/Dockerfile')) as src:
+        gid = os.stat(cfg['master']['docker-socket'])[stat.ST_GID]
         with open(os.path.join(build_directory, 'Dockerfile'), 'w') as dst:
-            dst.write(src.read())
-
-    volumes = cfg['master'].get('volumes', []) + [
-        "%s:/var/run/docker.sock" % cfg['master']['docker-socket'],
-        "%s:/buildmaster" % buildbot_root,
-        "%s:/steps" % os.path.join(project_directory, 'steps'),
-    ]
-    options = [
-        "-p", "%s:8010" % cfg['master']['www-port'],
-        "-p", "%s:9989" % cfg['master']['server-port'],
-    ]
-    for volume in volumes:
-        options += ['-v', volume]
-
-    options += [
-        "-w", "/buildmaster",
-        cfg['master']['image-name']
-    ]
-    image_id = subprocess.check_output(['docker', 'images', '-q', '--no-trunc', cfg['master']['image-name']])
-    if not image_id or force:
-        status("Creating the docker image '%s'" % cfg['master']['image-name'])
-        if image_id:
-            subprocess.check_call(
-                ['docker', 'run', '--rm', '-t'] + options +
-                ['chown', '-R', '{u}:{g}'.format(u = os.getuid(), g = os.getgid()), '.'],
-                stdout = debug_stream(),
+            dst.write(
+                src.read().format(
+                    user = 'buildmaster',
+                    uid = os.getuid(),
+                    gid = gid,
+                )
             )
-        subprocess.check_call(
-            ['docker', 'build', '-t', cfg['master']['image-name'], '.'],
-            cwd = build_directory,
-            stdout = debug_stream(),
-            stderr = debug_stream(),
+
+    master_client = docker.Client(
+        volumes = cfg['master'].get('volumes', []) + [
+            "%s:/var/run/docker.sock" % cfg['master']['docker-socket'],
+            "%s:/buildmaster" % buildbot_root,
+            "%s:/steps" % os.path.join(project_directory, 'steps'),
+            "%s:/keys" % os.path.join(project_directory, 'keys'),
+            "%s:/artifacts" % os.path.join(build_directory, 'artifacts'),
+        ],
+        ports = [
+            "%s:8010" % cfg['master']['www-port'],
+            "%s:9989" % cfg['master']['server-port'],
+        ],
+        cwd = '/buildmaster',
+        image_name = cfg['master']['image-name'],
+        remove = True,
+        pty = True,
+    )
+
+    image_id = client.image_id(cfg['master']['image-name'])
+    if not image_id or force:
+        status("Creating master image '%s'" % cfg['master']['image-name'])
+        client.cmd(
+            'build', '-t', cfg['master']['image-name'], build_directory,
         )
 
     for name, slave in cfg['slaves'].items():
-        volumes = []
-        for volume in slave.get('volumes', []):
-            parts = volume.split(':')
-            src, dst = parts[0:2]
-            if not os.path.isabs(src):
-                src = os.path.join(build_directory, src)
-            if not os.path.isabs(dst):
-                raise Error("The volume %s destination mount point of the slave %s is not absolute" % (volume, name))
-            if not os.path.exists(src):
-                os.makedirs(src)
-            volumes.append(':'.join([src, dst] + parts[2:]))
-        slave['volumes'] = volumes
-
+        if slave['external']:
+            continue
+        dockerfile = file_content(
+            os.path.join(project_directory, slave['docker-file']),
+            master_hostname = '%(server-address)s:%(server-port)s' % cfg['master'],
+            slave_name = name,
+            slave_password = slave['password'],
+            user = 'buildslave',
+            uid = os.getuid(),
+            gid = os.getgid(),
+        )
+        status("Creating slave image", slave['image-name'])
+        with tempfile.TemporaryFile() as f:
+            f.write(dockerfile)
+            f.flush()
+            f.seek(0)
+            client.cmd(
+                'build', '-t', slave['image-name'], '-',
+                host = slave['docker-host'],
+                stdin = f,
+                remove = True,
+            )
 
     if not os.path.exists(os.path.join(buildbot_root, 'buildbot.tac')):
         status("Creating the buildbot master in", buildbot_root)
-        subprocess.check_call(
-            ['docker', 'run', '--rm', '-t'] + options +
-            ['chown', '-R', '{u}:{g}'.format(u = os.getuid(), g = os.getgid()), '.'],
-            stdout = debug_stream(),
-        )
-        subprocess.check_call(
-            ['docker', 'run', '--rm', '-t'] + options +
-            ["buildbot", "create-master", '.'],
-            stdout = debug_stream(),
-        )
-        subprocess.check_call(
-            ['docker', 'run', '--rm', '-t'] + options +
-            ['chown', '-R', '{u}:{g}'.format(u = os.getuid(), g = os.getgid()), '.'],
-            stdout = debug_stream(),
+        master_client.cmd(
+            'run', "buildbot", "create-master", '.',
+            remove = True,
+            cwd = '/buildmaster',
         )
 
-    subprocess.check_call(
-        ['docker', 'run', '--rm', '-t'] + options +
-        ['chown', '-R', '{u}:{g}'.format(u = os.getuid(), g = os.getgid()), '.'],
-        stdout = debug_stream(),
-    )
     for step_dir in ('slaves',):
         replace_dir(
             os.path.join(project_directory, step_dir),
@@ -166,34 +184,30 @@ def main(force, project_directory, build_directory, console, follow):
         json.dump(cfg, f)
 
     if console:
-        retcode = subprocess.call(
-            [
-                'docker', 'run', '--rm', '-ti',
+        try:
+            master_client.cmd(
+                'run',
                 '--cidfile', master_container_path,
                 '-v', '%s:/container.id' % master_container_path,
-            ] + options + ['bash'],
-        )
-        subprocess.call(
-            ['docker', 'run', '--rm', '-t'] + options +
-            ['chown', '-R', '{u}:{g}'.format(u = os.getuid(), g = os.getgid()), '.'],
-            stdout = debug_stream(),
-        )
+                'bash',
+            )
+            retcode = 0
+        except:
+            retcode = 1
         sys.exit(retcode)
 
     if follow:
         status("Following build master logs")
-        tailf = subprocess.Popen(
-            ['tail', '-n0', '-f', os.path.join(buildbot_root, 'twistd.log')]
-        )
-    id = subprocess.check_output(
-        [
-            'docker', 'run', '-d',
-             '--cidfile', master_container_path,
-             '-v', '%s:/container.id' % master_container_path,
-        ] +
-        options +
-        #['twistd', '--nodaemon', '--no_save', '-y', 'buildbot.tac'],
-        ['buildbot', 'start', '--nodaemon', '.']
+        log = os.path.join(buildbot_root, 'twistd.log')
+        subprocess.check_call(['touch', log])
+        tailf = subprocess.Popen(['tail', '-n0', '-f', log])
+    id = master_client.cmd_output(
+        'run', 'buildbot', 'start', '--nodaemon', '.',
+        extra_volumes = ['%s:/container.id' % master_container_path],
+        remove = False,
+        daemon = True,
+        pty = False,
+        cidfile = master_container_path,
     ).strip()
     status("Started buildbot master in", id)
 

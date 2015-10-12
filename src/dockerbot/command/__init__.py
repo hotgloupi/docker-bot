@@ -5,3 +5,4 @@ from . import start
 from . import status
 from . import stop
 from . import restart
+from . import clean

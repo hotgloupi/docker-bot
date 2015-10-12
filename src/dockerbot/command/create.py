@@ -10,7 +10,6 @@ import yaml
 
 from ..tools import copy_resource
 from ..error import Error
-from ..config import Config
 from ..log import warn
 
 import yaml
@@ -64,6 +63,11 @@ def main(project_directory, force):
                 step,
                 steps_dir,
             )
+
+    keys_dir = os.path.join(project_directory, 'keys')
+    if not os.path.exists(keys_dir):
+        os.makedirs(keys_dir)
+
     config = os.path.join(project_directory, 'dockerbot.yml')
     if not os.path.exists(config):
         print("Please copy {0}.sample to {0} and edit it to fit your needs".format(config))

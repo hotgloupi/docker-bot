@@ -96,6 +96,13 @@ stop_parser.add_argument(
     help = 'Path to the docker-bot build directory',
 )
 
+stop_parser.add_argument(
+    '--timeout', '-t',
+    help = 'Timeout before terminating the master',
+    default = 60,
+    type = int,
+)
+
 
 # Restart command parser ######################################################
 restart_parser = subparsers.add_parser(
@@ -135,6 +142,30 @@ status_parser.add_argument(
     help = 'Path to the docker-bot build directory',
 )
 
+# Clean command parser ########################################################
+clean_parser = subparsers.add_parser(
+    'clean',
+    help = 'Remove leftovers',
+    parents = [common_parser],
+)
+
+clean_parser.add_argument(
+    'build_directory',
+    nargs = '?',
+    help = 'Path to the docker-bot build directory',
+)
+
+clean_parser.add_argument(
+    '--orphan-images', '-o',
+    help = 'Remove orphan images',
+    action = 'store_true'
+)
+
+clean_parser.add_argument(
+    '--dead-containers', '-c',
+    help = 'Remove orphan images',
+    action = 'store_true'
+)
 
 # Parsing arguments
 create_parser.set_defaults(func = command.create.main)
@@ -142,6 +173,7 @@ start_parser.set_defaults(func = command.start.main)
 stop_parser.set_defaults(func = command.stop.main)
 restart_parser.set_defaults(func = command.restart.main)
 status_parser.set_defaults(func = command.status.main)
+clean_parser.set_defaults(func = command.clean.main)
 
 args = vars(parser.parse_args())
 main = args.pop('func')
