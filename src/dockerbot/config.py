@@ -67,6 +67,7 @@ def load(build_directory, config_file):
             variant.setdefault('slaves', build.get('slaves'))
             variant.setdefault('steps', build.get('steps'))
             variant.setdefault('artifacts', build.get('artifacts', []))
+            variant.setdefault('upload-artifacts', build.get('upload-artifacts', []))
             env = {}
             env.update(build['env'])
             env.update(variant.get('env', {}))
