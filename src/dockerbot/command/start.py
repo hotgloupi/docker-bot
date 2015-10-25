@@ -187,8 +187,8 @@ def main(force, project_directory, build_directory, console, follow):
         try:
             master_client.cmd(
                 'run',
-                '--cidfile', master_container_path,
-                '-v', '%s:/container.id' % master_container_path,
+       #         '--cidfile', master_container_path,
+       #         '-v', '%s:/container.id' % master_container_path,
                 'bash',
             )
             retcode = 0
