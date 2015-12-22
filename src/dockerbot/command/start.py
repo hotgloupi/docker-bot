@@ -107,14 +107,11 @@ def main(force, project_directory, build_directory, console, follow):
 
     with open(os.path.join(project_directory, 'master/Dockerfile')) as src:
         gid = os.stat(cfg['master']['docker-socket'])[stat.ST_GID]
-        with open(os.path.join(build_directory, 'Dockerfile'), 'w') as dst:
-            dst.write(
-                src.read().format(
-                    user = 'buildmaster',
-                    uid = os.getuid(),
-                    gid = gid,
-                )
-            )
+        master_dockerfile = src.read().format(
+            user = 'buildmaster',
+            uid = os.getuid(),
+            gid = gid,
+        )
 
     master_client = docker.Client(
         volumes = cfg['master'].get('volumes', []) + [
@@ -137,9 +134,14 @@ def main(force, project_directory, build_directory, console, follow):
     image_id = client.image_id(cfg['master']['image-name'])
     if not image_id or force:
         status("Creating master image '%s'" % cfg['master']['image-name'])
-        client.cmd(
-            'build', '-t', cfg['master']['image-name'], build_directory,
-        )
+        with tempfile.TemporaryFile() as f:
+            f.write(master_dockerfile)
+            f.flush()
+            f.seek(0)
+            client.cmd(
+                'build', '-t', cfg['master']['image-name'], '-',
+                stdin = f,
+            )
 
     for name, slave in cfg['slaves'].items():
         if slave['external']:
