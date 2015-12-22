@@ -99,7 +99,7 @@ stop_parser.add_argument(
 stop_parser.add_argument(
     '--timeout', '-t',
     help = 'Timeout before terminating the master',
-    default = 60,
+    default = 6,
     type = int,
 )
 

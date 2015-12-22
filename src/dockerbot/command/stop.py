@@ -9,7 +9,7 @@ from ..log import warn, status, debug_stream
 from .. import docker
 from .. import config
 
-def main(force, build_directory, timeout = 60):
+def main(force, build_directory, timeout = 6):
     if build_directory is None:
         build_directory = os.getcwd()
     build_directory = os.path.abspath(build_directory)
