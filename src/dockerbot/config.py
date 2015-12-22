@@ -40,6 +40,7 @@ def load(build_directory, config_file):
         if not is_external:
             slave.setdefault('idle-timeout', 600)
             slave.setdefault('image-name', '%s-build-%s' % (project, name))
+        slave['password-fixed'] = 'password' in slave
         slave.setdefault(
             'password',
             '%s-%s-%s' % (project, name, random.randint(0, 10000000000))

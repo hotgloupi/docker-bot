@@ -144,6 +144,9 @@ def main(force, project_directory, build_directory, console, follow):
             )
 
     for name, slave in cfg['slaves'].items():
+        if slave['password-fixed'] and not force and client.image_id(slave['image-name']):
+            status("Using already built slave image", slave['image-name'])
+            continue
         if slave['external']:
             continue
         dockerfile = file_content(
@@ -164,7 +167,7 @@ def main(force, project_directory, build_directory, console, follow):
                 'build', '-t', slave['image-name'], '-',
                 host = slave['docker-host'],
                 stdin = f,
-                remove = True,
+                remove = False,
             )
 
     if not os.path.exists(os.path.join(buildbot_root, 'buildbot.tac')):
