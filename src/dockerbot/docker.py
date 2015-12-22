@@ -31,18 +31,18 @@ class Client(object):
 
     @property
     def containers(self):
-        return self.cmd_output('ps', '-a', '-q', '--no-trunc').split('\n')
+        return filter(None, self.cmd_output('ps', '-a', '-q', '--no-trunc').split('\n'))
 
     @property
     def alive_containers(self):
-        return self.cmd_output('ps', '-q', '--no-trunc').split('\n')
+        return filter(None, self.cmd_output('ps', '-q', '--no-trunc').split('\n'))
 
     def container_image(self, id):
-        return self.cmd_output('inspect', '-f', '{{.Config.Image}}', id).strip()
+        return filter(None, self.cmd_output('inspect', '-f', '{{.Config.Image}}', id).strip())
 
     @property
     def images(self):
-        self.cmd_output('images', '-q', '--no-trunc').split('\n')
+        return filter(None, self.cmd_output('images', '-q', '--no-trunc').split('\n'))
 
     def stop_container(self, id):
         self.cmd('stop', id)
