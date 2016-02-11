@@ -6,11 +6,20 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
            git \
            zip
 
-RUN pip install buildbot-slave
+RUN pip install {buildslave_packages}
 
 RUN groupadd -r {user} -g {gid} && useradd -r -g {user} -u {uid} {user}
 RUN mkdir -p /buildslave
 RUN chown {user}:{user} -R /buildslave
+
+
+# Adapt this if you need sudo
+#RUN yum install -y sudo
+#RUN groupadd -r sudo
+#RUN echo "{user}:{user}" | chpasswd && usermod -a -G sudo {user}
+#RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+#RUN echo 'Defaults:%sudo !requiretty' >> /etc/sudoers
+
 USER {user}
 WORKDIR /buildslave
 
