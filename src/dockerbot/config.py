@@ -4,6 +4,7 @@ from __future__ import print_function
 import yaml
 import os
 import random
+from copy import deepcopy
 
 from .error import Error
 
@@ -15,7 +16,10 @@ def load(build_directory, config_file):
     if project is None:
         raise Error("Missing 'project' key in config file")
 
+    slave_defaults = cfg.get('slave-defaults', {})
     for name, slave in cfg['slaves'].items():
+        for k, v in slave_defaults.items():
+            slave.setdefault(k, deepcopy(v))
         is_external = slave.get('external', not bool(slave.get('docker-file')))
         slave['external'] = is_external
         if not is_external:
