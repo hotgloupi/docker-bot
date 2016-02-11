@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import getpass
+import pipes
 
 def replace_dir(src, dst):
     if os.path.exists(dst):
@@ -35,6 +36,19 @@ def file_content(path, **kw):
         return f.read().format(**kw)
 
 
+BUILDSLAVE_PACKAGES = [
+    'buildbot-slave==0.8.12',
+    'twisted==15.4.0',
+]
+
+BUILDMASTER_PACKAGES = [
+    'six>=1.9.0',
+    'docker-py',
+    'requests',
+    'buildbot==0.9.0b6',
+    'buildbot-www==0.9.0b6',
+    'buildbot-waterfall-view==0.9.0b6',
+]
 
 def main(force, project_directory, build_directory, console, follow):
     if build_directory is None:
@@ -73,7 +87,7 @@ def main(force, project_directory, build_directory, console, follow):
                 os.makedirs(src)
                 #os.chmod(src, stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)
 
-    buildbot_root = os.path.join(build_directory, 'buildbot')
+    buildbot_root = os.path.join(build_directory, 'master/root')
 
     client = docker.Client()
 
@@ -111,6 +125,7 @@ def main(force, project_directory, build_directory, console, follow):
             user = 'buildmaster',
             uid = os.getuid(),
             gid = gid,
+            buildmaster_packages = ' '.join(map(pipes.quote, BUILDMASTER_PACKAGES)),
         )
 
     master_client = docker.Client(
@@ -157,6 +172,7 @@ def main(force, project_directory, build_directory, console, follow):
             user = 'buildslave',
             uid = os.getuid(),
             gid = os.getgid(),
+            buildslave_packages = ' '.join(map(pipes.quote, BUILDSLAVE_PACKAGES)),
         )
         status("Creating slave image", slave['image-name'])
         with tempfile.TemporaryFile() as f:
