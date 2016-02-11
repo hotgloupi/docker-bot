@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 from io import BytesIO
+import time
 
 from twisted.internet import defer
 from twisted.internet import threads
@@ -129,7 +130,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
             found = self._image_exists(docker_client)
             image = self.image
         else:
-            image = '%s_%s_image' % (self.slavename, id(self))
+            image = '%s_%s_%s_image' % (self.slavename, id(self), int(time.time() * 1000))
         if (not found) and (self.dockerfile is not None):
             log.msg("Image '%s' not found, building it from scratch" %
                     image)
@@ -147,7 +148,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
         instance = docker_client.create_container(
             image,
             self.command,
-            name='%s_%s' % (self.slavename, id(self)),
+            name='%s_%s_%s' % (self.slavename, id(self), int(time.time() * 1000)),
             volumes=self.volumes,
             **self.create_container_args
         )
@@ -172,7 +173,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
             del logs
         return [instance['Id'], self.image]
 
-    def stop_instance(self, fast=False):
+    def stop_instance(self, fast=True):
         if self.instance is None:
             # be gentle. Something may just be trying to alert us that an
             # instance never attached, and it's because, somehow, we never
@@ -186,7 +187,7 @@ class DockerLatentBuildSlave(AbstractLatentBuildSlave):
         docker_client = client.Client(**self.client_args)
         log.msg('Stopping container %s...' % instance['Id'][:6])
         docker_client.stop(instance['Id'])
-        if not fast:
+        if False and not fast:
             log.msg('Waiting container %s...' % instance['Id'][:6])
             docker_client.wait(instance['Id'])
         log.msg('Removing container %s...' % instance['Id'][:6])
