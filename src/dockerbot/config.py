@@ -23,7 +23,11 @@ def load(build_directory, config_file):
         is_external = slave.get('external', not bool(slave.get('docker-file')))
         slave['external'] = is_external
         if not is_external:
-            slave.setdefault('volumes', []).append('builds/%s:/buildslave/' % name)
+            slave.setdefault('volumes', []).extend([
+                'slave/%s/root:/buildslave' % name,
+                'slave/%s/tmp:/tmp' % name,
+            ])
+
             volumes = []
             for volume in slave['volumes']:
                 parts = volume.split(':')
