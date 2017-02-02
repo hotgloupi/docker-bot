@@ -37,7 +37,7 @@ def file_content(path, **kw):
 
 
 BUILDSLAVE_PACKAGES = [
-    'buildbot-slave==0.8.12',
+    'buildbot-worker==0.9.1',
     'twisted==15.4.0',
 ]
 
@@ -45,9 +45,10 @@ BUILDMASTER_PACKAGES = [
     'six>=1.9.0',
     'docker-py',
     'requests',
-    'buildbot==0.9.0b6',
-    'buildbot-www==0.9.0b6',
-    'buildbot-waterfall-view==0.9.0b6',
+    'buildbot==0.9.1',
+    'buildbot-www==0.9.1',
+    'buildbot-waterfall-view==0.9.1',
+    'buildbot-console-view==0.9.1',
 ]
 
 def main(force, project_directory, build_directory, console, follow):
@@ -189,7 +190,8 @@ def main(force, project_directory, build_directory, console, follow):
     if not os.path.exists(os.path.join(buildbot_root, 'buildbot.tac')):
         status("Creating the buildbot master in", buildbot_root)
         master_client.cmd(
-            'run', "buildbot", "create-master", '.',
+            'run', "buildbot", "create-master",
+            '--db=%s' % cfg['master']['database']['url'], '.',
             remove = True,
             cwd = '/buildmaster',
         )
@@ -202,7 +204,7 @@ def main(force, project_directory, build_directory, console, follow):
 
 
     with open(os.path.join(buildbot_root, 'config.json'), 'w') as f:
-        json.dump(cfg, f)
+        json.dump(cfg, f, indent = 4)
 
     if console:
         try:

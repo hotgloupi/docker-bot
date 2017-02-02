@@ -15,6 +15,14 @@ def load(build_directory, config_file):
     project = cfg.get('project')
     if project is None:
         raise Error("Missing 'project' key in config file")
+    if project.get('domain') is None:
+        raise Error("Missing 'project.domain' key in config file")
+
+    master = cfg.setdefault('master', {})
+    db = master.setdefault('database', {})
+    db.setdefault('url', 'sqlite:///state.sqlite')
+
+    reporters = master.setdefault('reporters', [])
 
     slave_defaults = cfg.get('slave-defaults', {})
     for name, slave in cfg['slaves'].items():
@@ -47,15 +55,26 @@ def load(build_directory, config_file):
         slave['env']['SLAVE_NAME'] = name
         if not is_external:
             slave.setdefault('idle-timeout', 600)
-            slave.setdefault('image-name', '%s-build-%s' % (project, name))
+            slave.setdefault('image-name', '%s-build-%s' % (project['name'], name))
         slave['password-fixed'] = 'password' in slave
         slave.setdefault(
             'password',
-            '%s-%s-%s' % (project, name, random.randint(0, 10000000000))
+            '%s-%s-%s' % (project['name'], name, random.randint(0, 10000000000))
         )
 
     for name, repository in cfg['repositories'].items():
         repository['name'] = name
+        if repository.get('branch'):
+            if repository.get('branch-filter'):
+                raise Error("Cannot set both repositories.branch and repositories.branch-filter")
+            repository['branch-filter'] = {
+                'allow': [{'is': repository.pop('branch')}]
+            }
+        elif repository.get('branch-filter') is None:
+            repository['branch-filter'] = {
+                'allow': [{'match': '.*'}]
+            }
+
         repository.setdefault('branch', 'master')
         repository.setdefault('poll-interval', 30)
 
@@ -64,9 +83,11 @@ def load(build_directory, config_file):
         if repository_name not in cfg['repositories']:
             raise Error("Repository '%s' is not present in the repositories section" %
                         repository_name)
-        build['repository'] = cfg['repositories'][repository_name]
+        build['repository'] = deepcopy(cfg['repositories'][repository_name])
         build['repository']['name'] = repository_name
         build.setdefault('env', {})
+        if build.get('branch-filter'):
+            build['repository']['branch-filter'] = build.pop('branch-filter')
 
         if 'variants' not in build:
             build['variants'] = {'default': {'name': name}}
@@ -77,12 +98,15 @@ def load(build_directory, config_file):
             variant.setdefault('steps', build.get('steps'))
             variant.setdefault('artifacts', build.get('artifacts', []))
             variant.setdefault('upload-artifacts', build.get('upload-artifacts', []))
+            variant['repository'] = deepcopy(build['repository'])
+            if variant.get('branch-filter'):
+                variant['repository']['branch-filter'] = variant.pop('branch-filter')
             env = {}
             env.update(build['env'])
             env.update(variant.get('env', {}))
             variant['env'] = env
             for k in ('slaves', 'steps'):
                 if not variant[k]:
-                    raise Error("Build variant %s does not have any k" % (variant['name'], k))
+                    raise Error("Build variant %s does not have any %s" % (variant['name'], k))
 
     return cfg
