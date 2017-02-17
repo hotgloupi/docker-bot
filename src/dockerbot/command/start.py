@@ -25,6 +25,17 @@ def replace_dir(src, dst):
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
 
+def merge_dir(src, dst):
+    if not os.path.isdir(dst):
+        os.makedirs(dst)
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            merge_dir(s, d)
+        else:
+            shutil.copyfile(s, d)
+
 def link_dir(src, dst):
     if not os.path.exists(dst):
         os.symlink(src, dst)
@@ -42,9 +53,12 @@ BUILDSLAVE_PACKAGES = [
 ]
 
 BUILDMASTER_PACKAGES = [
+    'setuptools',
+    'cffi',
     'six>=1.9.0',
     'docker-py',
     'requests',
+    'treq',
     'buildbot==0.9.1',
     'buildbot-www==0.9.1',
     'buildbot-waterfall-view==0.9.1',
@@ -119,6 +133,7 @@ def main(force, project_directory, build_directory, console, follow):
         os.unlink(twisted_pidfile)
     copy_resource('master.cfg', buildbot_root)
     copy_resource('dockerslave.py', buildbot_root)
+    copy_resource('slack.py', buildbot_root)
 
     with open(os.path.join(project_directory, 'master/Dockerfile')) as src:
         gid = os.stat(cfg['master']['docker-socket'])[stat.ST_GID]
