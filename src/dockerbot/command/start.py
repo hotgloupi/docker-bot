@@ -46,24 +46,25 @@ def file_content(path, **kw):
     with open(path) as f:
         return f.read().format(**kw)
 
+BUILDBOT_VERSION='0.9.4'
 
-BUILDSLAVE_PACKAGES = [
-    'buildbot-worker==0.9.1',
+BUILDSLAVE_PACKAGES = list(p.format(version=BUILDBOT_VERSION) for p in [
+    'buildbot-worker=={version}',
     'twisted==15.4.0',
-]
+])
 
-BUILDMASTER_PACKAGES = [
+BUILDMASTER_PACKAGES = list(p.format(version=BUILDBOT_VERSION) for p in [
     'setuptools',
     'cffi',
     'six>=1.9.0',
     'docker-py',
     'requests',
     'treq',
-    'buildbot==0.9.1',
-    'buildbot-www==0.9.1',
-    'buildbot-waterfall-view==0.9.1',
-    'buildbot-console-view==0.9.1',
-]
+    'buildbot=={version}',
+    'buildbot-www=={version}',
+    'buildbot-waterfall-view=={version}',
+    'buildbot-console-view=={version}',
+])
 
 def main(force, project_directory, build_directory, console, follow):
     if build_directory is None:
