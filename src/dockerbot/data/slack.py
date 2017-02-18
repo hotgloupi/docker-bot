@@ -2,8 +2,15 @@ from buildbot.reporters.http import HttpStatusPushBase
 from buildbot.util import httpclientservice
 from buildbot.util.logger import Logger
 from buildbot.reporters import utils
+from buildbot.process.results import CANCELLED
+from buildbot.process.results import EXCEPTION
+from buildbot.process.results import FAILURE
+from buildbot.process.results import SUCCESS
+from buildbot.process.results import WARNINGS
+from buildbot.process.results import Results
 
 from twisted.internet import defer
+import json
 
 log = Logger()
 
@@ -16,7 +23,7 @@ class SlackStatusPush(HttpStatusPushBase):
     name = "SlackStatusPush"
 
     @defer.inlineCallbacks
-    def reconfigService(self, weburl, endpoint = 'https://hooks.slack.com',
+    def reconfigService(self, weburl,
                  localhost_replace=False, username=None,
                  icon=None, notify_on_success=True, notify_on_failure=True,
                  **kwargs):
@@ -37,7 +44,7 @@ class SlackStatusPush(HttpStatusPushBase):
         """
 
         yield HttpStatusPushBase.reconfigService(self, **kwargs)
-        self._http = yield httpclientservice.HTTPClientService.getService(self.master, endpoint)
+        self._http = yield httpclientservice.HTTPClientService.getService(self.master, weburl)
 
         self.weburl = weburl
         self.localhost_replace = localhost_replace
@@ -47,71 +54,102 @@ class SlackStatusPush(HttpStatusPushBase):
         self.notify_on_failure = notify_on_failure
 
     @defer.inlineCallbacks
-    def buildFinished(self, build, key):
-        if not self.notify_on_success and result == SUCCESS:
+    def buildFinished(self, key, build):
+        yield utils.getDetailsForBuild(
+            self.master,
+            build,
+            wantProperties = True,
+            wantSteps = False,
+            wantPreviousBuild = False,
+            wantLogs = False
+        )
+        from pprint import pprint
+        pprint(build)
+
+        prop = lambda name: build['properties'].get(name, [None])[0]
+
+        build_url = build['url']
+        source_stamps = build['buildset']['sourcestamps']
+        branch = prop('branch')
+        project = prop('project')
+        buildername = prop('buildername')
+        if not buildername.startswith('build-'):
             return
+        buildername = buildername[len('build-'):]
+        buildnumber = prop('buildnumber')
+        worker = prop('workername')
+        rev = prop('revision')
+        repository = prop('repository')
+        blamelist = yield utils.getResponsibleUsersForBuild(self.master, build['buildid'])
+        responsible_users = '\n'.join(blamelist)
+        status = Results[build['results']]
 
-        if not self.notify_on_failure and result != SUCCESS:
-            return
-
-        build_url = self.master_status.getURLForThing(build)
-        if self.localhost_replace:
-            build_url = build_url.replace("//localhost", "//{}".format(
-                self.localhost_replace))
-
-        source_stamps = build.getSourceStamps()
-        branch_names = ', '.join([source_stamp.branch for source_stamp in source_stamps])
-        repositories = ', '.join([source_stamp.repository for source_stamp in source_stamps])
-        responsible_users = ', '.join(build.getResponsibleUsers())
-        revision = ', '.join([source_stamp.revision for source_stamp in source_stamps])
-        project = ', '.join([source_stamp.project for source_stamp in source_stamps])
-
-        if result == SUCCESS:
-            status = "Success"
+        if build['results'] == SUCCESS:
             color = "good"
+        elif build['results'] == FAILURE:
+            color = "#EE3435"
         else:
-            status = "Failure"
-            color = "failure"
+            color = '#AB12EF'
 
-        message = "New Build for {project} ({revision})\nStatus: *{status}*\nBuild details: {url}".format(
+        message = "Build <{url}|#{buildnumber} {buildername}> finished".format(
             project=project,
-            revision=revision,
+            revision=rev,
             status=status,
-            url=build_url
+            url=build_url,
+            buildnumber = buildnumber,
+            buildername = buildername,
         )
 
-        fields = []
+        fields = [
+            {
+                'title': 'Status',
+                'value': status,
+                'short': True,
+            },
+            {
+                "title": "Repository",
+                "value": "<http://git.eng.celoxica.com/?p={project}.git|{project}>".format(project = project),
+                "short": True
+            }
+        ]
         if responsible_users:
             fields.append({
-                "title": "Commiters",
-                "value": responsible_users
+                "title": "Responsible users",
+                "value": responsible_users,
+                'rev_short': True,
             })
 
-        if repositories:
+        if branch:
             fields.append({
-                "title": "Repository",
-                "value": repositories,
+                "title": "Branch",
+                "value": '<http://git.eng.celoxica.com/?p={project}.git;a=shortlog;h=refs/heads/{branch}|{branch}>'.format(
+                    project = project,
+                    branch = branch,
+                ),
                 "short": True
             })
 
-        if branch_names:
+        if rev:
             fields.append({
-                "title": "Branch",
-                "value": branch_names,
+                "title": "Revision",
+                "value": '<http://git.eng.celoxica.com/?p={project}.git;h={rev}|{rev_short}>'.format(
+                    project = project,
+                    rev = rev,
+                    rev_short = rev[:8]
+                ),
                 "short": True
             })
 
         payload = {
-            "text": " ",
             "attachments": [
               {
-                "fallback": message,
-                "text": message,
-                "color": color,
-                "mrkdwn_in": ["text", "title", "fallback"],
-                "fields": fields
+                  "text": message,
+                  "color": color,
+                  "mrkdwn_in": ["text", "title", "fallback", "fields"],
+                  "fields": fields
               }
-            ]
+            ],
+            'mrkdwn': True,
         }
 
         if self.username:
@@ -123,7 +161,9 @@ class SlackStatusPush(HttpStatusPushBase):
             else:
                 payload['icon_url'] = self.icon
 
-        response = yield self._http.post(self.weburl, json=json.dumps(payload))
+        pprint(json.dumps(payload))
+
+        response = yield self._http.post("", json=payload)
         if response.code != 200:
             content = yield response.content()
             log.error("{code}: unable to upload status: {content}",
