@@ -62,8 +62,6 @@ class SlackStatusPush(HttpStatusPushBase):
             wantPreviousBuild = False,
             wantLogs = False
         )
-        from pprint import pprint
-        pprint(build)
         prop = lambda name: build['properties'].get(name, [None])[0]
 
         build_url = build['url']
