@@ -1,3 +1,6 @@
+
+## This file comes from https://github.com/mindmatters/buildbot-status-slack
+
 from buildbot.reporters.http import HttpStatusPushBase
 from buildbot.util import httpclientservice
 from buildbot.util.logger import Logger
@@ -23,35 +26,31 @@ class SlackStatusPush(HttpStatusPushBase):
     name = "SlackStatusPush"
 
     @defer.inlineCallbacks
-    def reconfigService(self, weburl,
-                 localhost_replace=False, username=None,
-                 icon=None, notify_on_success=True, notify_on_failure=True,
-                 **kwargs):
+    def reconfigService(self,
+                        weburl,
+                        username = None,
+                        icon = None,
+                        templates = None,
+                        **kwargs):
         """
         Creates a SlackStatusPush status service.
 
         :param weburl: Your Slack weburl
-        :param localhost_replace: If your Buildbot web fronted doesn't know
-            its public address it will use "localhost" in its links. You can
-            change this by setting this variable to true.
         :param username: The user name of the "user" positing the messages on
             Slack.
         :param icon: The icon of the "user" posting the messages on Slack.
-        :param notify_on_success: Set this to False if you don't want
-            messages when a build was successful.
-        :param notify_on_failure: Set this to False if you don't want
-            messages when a build failed.
         """
 
         yield HttpStatusPushBase.reconfigService(self, **kwargs)
         self._http = yield httpclientservice.HTTPClientService.getService(self.master, weburl)
 
         self.weburl = weburl
-        self.localhost_replace = localhost_replace
         self.username = username
         self.icon = icon
-        self.notify_on_success = notify_on_success
-        self.notify_on_failure = notify_on_failure
+
+        self.templates = {}
+        for t in ['repository', 'branch', 'revision']:
+            self.templates[t] = templates.get(t, '{%s}' % t)
 
     @defer.inlineCallbacks
     def buildFinished(self, key, build):
@@ -59,28 +58,32 @@ class SlackStatusPush(HttpStatusPushBase):
             self.master,
             build,
             wantProperties = True,
-            wantSteps = False,
+            wantSteps = True,
             wantPreviousBuild = False,
             wantLogs = False
         )
         from pprint import pprint
         pprint(build)
-
         prop = lambda name: build['properties'].get(name, [None])[0]
 
         build_url = build['url']
         source_stamps = build['buildset']['sourcestamps']
         branch = prop('branch')
-        project = prop('project')
+        build_name = prop('build_name')
+        variant_name = prop('variant_name')
         buildername = prop('buildername')
         if not buildername.startswith('build-'):
             return
         buildername = buildername[len('build-'):]
         buildnumber = prop('buildnumber')
         worker = prop('workername')
-        rev = prop('revision')
-        repository = prop('repository')
-        blamelist = yield utils.getResponsibleUsersForBuild(self.master, build['buildid'])
+        rev = prop('got_revision')
+        repository_name = prop('repository_name')
+        repository_url = prop('repository_url')
+        blamelist = yield utils.getResponsibleUsersForBuild(
+            self.master,
+            build['buildid']
+        )
         responsible_users = '\n'.join(blamelist)
         status = Results[build['results']]
 
@@ -91,13 +94,12 @@ class SlackStatusPush(HttpStatusPushBase):
         else:
             color = '#AB12EF'
 
-        message = "Build <{url}|#{buildnumber} {buildername}> finished".format(
-            project=project,
-            revision=rev,
-            status=status,
-            url=build_url,
+        message = "Build <{url}|#{buildnumber} {build_name} {variant_name} on {worker}> finished".format(
+            url = build_url,
             buildnumber = buildnumber,
-            buildername = buildername,
+            build_name = build_name,
+            variant_name = variant_name,
+            worker = worker,
         )
 
         fields = [
@@ -108,7 +110,7 @@ class SlackStatusPush(HttpStatusPushBase):
             },
             {
                 "title": "Repository",
-                "value": "<http://git.eng.celoxica.com/?p={project}.git|{project}>".format(project = project),
+                "value": self.templates['repository'].format(repository = repository_name),
                 "short": True
             }
         ]
@@ -122,8 +124,8 @@ class SlackStatusPush(HttpStatusPushBase):
         if branch:
             fields.append({
                 "title": "Branch",
-                "value": '<http://git.eng.celoxica.com/?p={project}.git;a=shortlog;h=refs/heads/{branch}|{branch}>'.format(
-                    project = project,
+                "value": self.templates['branch'].format(
+                    repository = repository_name,
                     branch = branch,
                 ),
                 "short": True
@@ -132,10 +134,10 @@ class SlackStatusPush(HttpStatusPushBase):
         if rev:
             fields.append({
                 "title": "Revision",
-                "value": '<http://git.eng.celoxica.com/?p={project}.git;h={rev}|{rev_short}>'.format(
-                    project = project,
-                    rev = rev,
-                    rev_short = rev[:8]
+                "value": self.templates['revision'].format(
+                    repository = repository_name,
+                    revision = rev,
+                    revision_short = rev[:8]
                 ),
                 "short": True
             })
@@ -160,8 +162,6 @@ class SlackStatusPush(HttpStatusPushBase):
                 payload['icon_emoji'] = self.icon
             else:
                 payload['icon_url'] = self.icon
-
-        pprint(json.dumps(payload))
 
         response = yield self._http.post("", json=payload)
         if response.code != 200:

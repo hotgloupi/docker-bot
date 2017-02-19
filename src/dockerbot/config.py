@@ -52,7 +52,7 @@ def load(build_directory, config_file):
 
         # Make sure that each slave has an env
         slave.setdefault('env', {})
-        slave['env']['SLAVE_NAME'] = name
+        slave['env']['SLAVE'] = name
         if not is_external:
             slave.setdefault('idle-timeout', 600)
             slave.setdefault('image-name', '%s-build-%s' % (project['name'], name))
