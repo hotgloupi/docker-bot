@@ -208,7 +208,7 @@ def main(force, project_directory, build_directory, console, follow):
         status("Creating the buildbot master in", buildbot_root)
         master_client.cmd(
             'run', "buildbot", "create-master",
-            '--db=%s' % cfg['master']['database']['url'],
+            '--db=%s' % cfg['master']['database']['url'], '.',
             remove = True,
             cwd = '/buildmaster',
         )
