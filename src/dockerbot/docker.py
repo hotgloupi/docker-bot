@@ -81,22 +81,25 @@ class Client(object):
         return self.__to_flags(**kw)
 
     def __to_flags(self,
-                  volumes = [],
-                  extra_volumes = [],
-                  ports = [],
-                  cwd = None,
-                  pty = False,
-                  image_name = None,
-                  remove = False,
-                  daemon = False,
-                  cidfile = None,
-                  host = None,
-                 ):
+                   volumes = [],
+                   extra_volumes = [],
+                   ports = [],
+                   cwd = None,
+                   pty = False,
+                   image_name = None,
+                   remove = False,
+                   daemon = False,
+                   cidfile = None,
+                   host = None,
+                   dns = None,
+    ):
         pre, post = [], []
         if host is not None:
             pre.extend(['-H', host])
         if remove:
             post.append('--rm')
+        if dns is not None:
+            post.extend(('--dns', dns))
         for volume in volumes:
             post.extend(('-v', volume))
         for volume in extra_volumes:
