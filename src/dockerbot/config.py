@@ -50,6 +50,11 @@ def load(build_directory, config_file):
                 volumes.append(':'.join([src, dst] + parts[2:]))
             slave['volumes'] = volumes
 
+        slave.setdefault('dns', [])
+        if not isinstance(slave['dns'], list):
+            raise Error(
+                "dns option should be a list, got %s" % slave['dns']
+            )
         # Make sure that each slave has an env
         slave.setdefault('env', {})
         slave['env']['SLAVE'] = name

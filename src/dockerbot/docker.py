@@ -91,15 +91,15 @@ class Client(object):
                    daemon = False,
                    cidfile = None,
                    host = None,
-                   dns = None,
+                   dns = [],
     ):
         pre, post = [], []
         if host is not None:
             pre.extend(['-H', host])
         if remove:
             post.append('--rm')
-        if dns is not None:
-            post.extend(('--dns', dns))
+        for addr in dns:
+            post.extend(('--dns', addr))
         for volume in volumes:
             post.extend(('-v', volume))
         for volume in extra_volumes:
