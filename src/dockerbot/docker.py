@@ -98,8 +98,9 @@ class Client(object):
             pre.extend(['-H', host])
         if remove:
             post.append('--rm')
-        for addr in dns:
-            post.extend(('--dns', addr))
+        if dns is not None:
+            for addr in dns:
+                post.extend(('--dns', addr))
         for volume in volumes:
             post.extend(('-v', volume))
         for volume in extra_volumes:
