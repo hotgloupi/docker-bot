@@ -59,6 +59,10 @@ slaves:
     win32:
         external: true
         password: "some password"
+    # Locks for this slave
+    # (e.g. here each build performed on "win32" slave takes one token from "win32slave" lock)
+    locks:
+        - win32slave
 
 # Describe the builds
 builds:
@@ -100,5 +104,17 @@ builds:
                     SOME_KEY: "Overriden by the variant"
                     NEW_KEY: "New value"
                     # SOME_OTHER_KEY is inherited from the build
+        # Locks for this build
+        # (e.g. here each build of "linux32" takes one token from "linux32builddebug" lock and one from "total" lock
+        #  if it doesn't remain any token in one of the two locks, buildbot will wait until a token is given back)
+        locks:
+            - linux32builddebug
+            - total
 
-
+# Enumerate the locks to limit the number of parallel builds
+locks:
+    # Name of the lock with the number of token
+    # N tokens means that buildbot will run a maximum of N builds declaring this lock -- directly or trough the slave definition
+    total: 5
+    win32slave: 2
+    builddebug: 2
